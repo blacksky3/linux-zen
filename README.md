@@ -1,6 +1,6 @@
 # linux-zen
 
-Zen kernel build for Archlinux.
+Zen kernel build for Archlinux. (PDS or BMQ enabled)
 
 # Version
 
