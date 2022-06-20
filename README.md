@@ -9,7 +9,7 @@ Zen kernel build for Archlinux. (PDS or BMQ enabled)
 # Build
 
     git clone https://github.com/blacksky3/linux-zen.git
-    cd linux-zen/5.17/{pds,bmq}
+    cd linux-zen/5.18/{pds,bmq}
     env _compiler=(1 or 2) makepkg -s
 
 # Build variables
