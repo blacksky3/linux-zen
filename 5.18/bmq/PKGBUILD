@@ -1,0 +1,288 @@
+
+# _     _            _        _          _____
+#| |__ | | __ _  ___| | _____| | ___   _|___ /
+#| '_ \| |/ _` |/ __| |/ / __| |/ / | | | |_ \
+#| |_) | | (_| | (__|   <\__ \   <| |_| |___) |
+#|_.__/|_|\__,_|\___|_|\_\___/_|\_\\__, |____/
+#                                  |___/
+
+#Maintainer: blacksky3 <blacksky3@tuta.io> <https://github.com/blacksky3>
+#Credits: Jan Alexander Steffens (heftig) <heftig@archlinux.org>
+#Credits: Andreas Radke <andyrtr@archlinux.org>
+
+################################# Arch ################################
+
+ARCH=x86
+
+################################# CC/CXX/HOSTCC/HOSTCXX ################################
+
+#Set compiler to build the kernel
+#Set '1' to build with GCC
+#Set '2' to build with CLANG and LLVM
+#Default is empty. It will build with GCC. To build with different compiler just use : env _compiler=(1 or 2) makepkg -s
+if [ -z ${_compiler+x} ]; then
+  _compiler=
+fi
+
+if [[ "$_compiler" = "1" ]]; then
+  _compiler=1
+  CC=gcc
+  CXX=g++
+  HOSTCC=gcc
+  HOSTCXX=g++
+elif [[ "$_compiler" = "2" ]]; then
+  _compiler=2
+  CC=clang
+  CXX=clang++
+  HOSTCC=clang
+  HOSTCXX=clang++
+else
+  _compiler=1
+  CC=gcc
+  CXX=g++
+  HOSTCC=gcc
+  HOSTCXX=g++
+fi
+
+###################################################################################
+
+pkgbase=linux-zen-bmq
+pkgname=("$pkgbase" "$pkgbase-headers")
+for _p in "${pkgname[@]}"; do
+  eval "package_$_p() {
+    $(declare -f "_package${_p#$pkgbase}")
+    _package${_p#$pkgbase}
+  }"
+done
+pkgver=5.18.5
+versiontag=5.18.5-zen1
+pkgrel=1
+major=5.18
+arch=(x86_64)
+url='https://www.kernel.org/'
+license=(GPL2)
+makedepends=(bison flex bc kmod libelf pahole cpio perl tar xz zstd xmlto git gcc gcc-libs glibc binutils make patch)
+if [[ "$_compiler" = "2" ]]; then
+  makedepends+=(clang llvm llvm-libs lld)
+fi
+options=(!strip)
+
+archlinuxpath=https://raw.githubusercontent.com/archlinux/svntogit-packages/73107319135f77ce02ca57cb005f7d88e3180842/trunk
+
+source=(https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-$major.tar.xz
+        https://github.com/zen-kernel/zen-kernel/releases/download/v$versiontag/v$versiontag.patch.xz
+        ${archlinuxpath}/config)
+
+export KBUILD_BUILD_HOST=archlinux
+export KBUILD_BUILD_USER=$pkgbase
+export KBUILD_BUILD_TIMESTAMP="$(date -Ru${SOURCE_DATE_EPOCH:+d @$SOURCE_DATE_EPOCH})"
+
+prepare(){
+  cd ${srcdir}/linux-$major
+
+  # Apply Zen patch
+  msg2 "Apply Zen patch v$versiontag"
+  patch -Np1 < "$srcdir/v$versiontag.patch"
+
+  local src
+  for src in "${source[@]}"; do
+    src="${src%%::*}"
+    src="${src##*/}"
+    [[ $src = *.patch ]] || continue
+    echo "Applying patch $src..."
+    patch -Np1 < "../$src"
+  done
+
+  plain ""
+
+  # Copy the config file first
+  # Copy "${srcdir}"/config to "${srcdir}"/linux-${major}/.config
+  msg2 "Copy "${srcdir}"/config to "${srcdir}"/linux-$major/.config"
+  cp "${srcdir}"/config .config
+
+  sleep 2s
+
+  plain ""
+
+  # Disable LTO with clang
+  if [[ "$_compiler" = "2" ]]; then
+    msg2 "Disable LTO"
+    scripts/config --disable CONFIG_LTO
+    scripts/config --disable CONFIG_LTO_CLANG
+    scripts/config --disable CONFIG_ARCH_SUPPORTS_LTO_CLANG
+    scripts/config --disable CONFIG_ARCH_SUPPORTS_LTO_CLANG_THIN
+    scripts/config --disable CONFIG_HAS_LTO_CLANG
+    scripts/config --disable CONFIG_LTO_NONE
+    scripts/config --disable CONFIG_LTO_CLANG_FULL
+    scripts/config --disable CONFIG_LTO_CLANG_THIN
+  fi
+
+  sleep 2s
+
+  msg2 "Enable CONFIG_SCHED_ALT, this feature enable alternative CPU scheduler"
+  scripts/config --enable CONFIG_SCHED_ALT
+
+  sleep 2s
+
+  msg2 "Enable BMQ CPU scheduler"
+  scripts/config --disable CONFIG_SCHED_PDS
+  scripts/config --enable CONFIG_SCHED_BMQ
+
+  sleep 2s
+
+  plain ""
+
+  # Setting localversion
+  msg2 "Setting localversion..."
+  scripts/setlocalversion --save-scmversion
+  echo "-${pkgbase}" > localversion
+
+  plain ""
+
+  # Config
+  if [[ "$_compiler" = "1" ]]; then
+    make ARCH=${ARCH} CC=${CC} CXX=${CXX} HOSTCC=${HOSTCC} HOSTCXX=${HOSTCXX} olddefconfig
+  elif [[ "$_compiler" = "2" ]]; then
+    make ARCH=${ARCH} CC=${CC} CXX=${CXX} LLVM=1 LLVM_IAS=1 HOSTCC=${HOSTCC} HOSTCXX=${HOSTCXX} olddefconfig
+  fi
+
+  plain ""
+
+  make -s kernelrelease > version
+  msg2 "Prepared $pkgbase version $(<version)"
+
+  plain ""
+}
+
+build(){
+  cd ${srcdir}/linux-$major
+
+  # make -j$(nproc) all
+  msg2 "make -j$(nproc) all..."
+  if [[ "$_compiler" = "1" ]]; then
+    make ARCH=${ARCH} CC=${CC} CXX=${CXX} HOSTCC=${HOSTCC} HOSTCXX=${HOSTCXX} -j$(nproc) all
+  elif [[ "$_compiler" = "2" ]]; then
+    make ARCH=${ARCH} CC=${CC} CXX=${CXX} LLVM=1 LLVM_IAS=1 HOSTCC=${HOSTCC} HOSTCXX=${HOSTCXX} -j$(nproc) all
+  fi
+}
+
+_package(){
+  pkgdesc="The Zen kernel and modules - BMQ enabled"
+  depends=(coreutils kmod initramfs)
+  optdepends=('wireless-regdb: to set the correct wireless channels of your country'
+              'linux-firmware: firmware images needed for some devices')
+  provides=(VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE VHBA-MODULE UKSMD-BUILTIN)
+
+  cd ${srcdir}/linux-$major
+
+  local kernver="$(<version)"
+  local modulesdir="${pkgdir}"/usr/lib/modules/${kernver}
+
+  msg2 "Installing boot image..."
+  # systemd expects to find the kernel here to allow hibernation
+  # https://github.com/systemd/systemd/commit/edda44605f06a41fb86b7ab8128dcf99161d2344
+  #install -Dm644 arch/${ARCH}/boot/bzImage "$modulesdir/vmlinuz"
+  msg2 "install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz""
+  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+
+  # Used by mkinitcpio to name the kernel
+  msg2 "echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase""
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+
+  msg2 "Installing modules..."
+  if [[ "$_compiler" = "1" ]]; then
+    make ARCH=${ARCH} CC=${CC} CXX=${CXX} HOSTCC=${HOSTCC} HOSTCXX=${HOSTCXX} INSTALL_MOD_PATH="${pkgdir}"/usr INSTALL_MOD_STRIP=1 DEPMOD=/doesnt/exist -j$(nproc) modules_install  # Suppress depmod
+  elif [[ "$_compiler" = "2" ]]; then
+    make ARCH=${ARCH} CC=${CC} CXX=${CXX} LLVM=1 LLVM_IAS=1 HOSTCC=${HOSTCC} HOSTCXX=${HOSTCXX} INSTALL_MOD_PATH="${pkgdir}"/usr INSTALL_MOD_STRIP=1 DEPMOD=/doesnt/exist -j$(nproc) modules_install  # Suppress depmod
+  fi
+
+  # remove build and source links
+  msg2 "Remove build dir and source dir..."
+  rm -rf "$modulesdir"/{source,build}
+}
+
+_package-headers(){
+  pkgdesc="Headers and scripts for building modules for the $pkgbase kernel"
+  depends=("${pkgbase}" pahole)
+
+  cd ${srcdir}/linux-$major
+
+  local builddir="$pkgdir"/usr/lib/modules/"$(<version)"/build
+
+  msg2 "Installing build files..."
+  install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map *localversion* version vmlinux
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
+  cp -t "$builddir" -a scripts
+
+  # add objtool for external module building and enabled VALIDATION_STACK option
+  install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+
+  # add xfs and shmem for aufs building
+  mkdir -p "$builddir"/{fs/xfs,mm}
+
+  msg2 "Installing headers..."
+  cp -t "$builddir" -a include
+  cp -t "$builddir/arch/x86" -a arch/x86/include
+  install -Dt "$builddir/arch/x86/kernel" -m644 arch/x86/kernel/asm-offsets.s
+
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+
+  # https://bugs.archlinux.org/task/13146
+  install -Dt "$builddir/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+
+  # https://bugs.archlinux.org/task/20402
+  install -Dt "$builddir/drivers/media/usb/dvb-usb" -m644 drivers/media/usb/dvb-usb/*.h
+  install -Dt "$builddir/drivers/media/dvb-frontends" -m644 drivers/media/dvb-frontends/*.h
+  install -Dt "$builddir/drivers/media/tuners" -m644 drivers/media/tuners/*.h
+
+  # https://bugs.archlinux.org/task/71392
+  install -Dt "$builddir/drivers/iio/common/hid-sensors" -m644 drivers/iio/common/hid-sensors/*.h
+
+  msg2 "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+
+  msg2 "Removing unneeded architectures..."
+  local arch
+  for arch in "$builddir"/arch/*/; do
+    [[ $arch = */x86/ ]] && continue
+    msg2 "Removing $(basename "$arch")"
+    rm -r "$arch"
+  done
+
+  msg2 "Removing documentation..."
+  rm -r "$builddir/Documentation"
+
+  msg2 "Removing broken symlinks..."
+  find -L "$builddir" -type l -printf 'Removing %P\n' -delete
+
+  msg2 "Removing loose objects..."
+  find "$builddir" -type f -name '*.o' -printf 'Removing %P\n' -delete
+
+  msg2 "Stripping build tools..."
+  local file
+  while read -rd '' file; do
+    case "$(file -bi "$file")" in
+      application/x-sharedlib\;*)      # Libraries (.so)
+        strip -v $STRIP_SHARED "$file" ;;
+      application/x-archive\;*)        # Libraries (.a)
+        strip -v $STRIP_STATIC "$file" ;;
+      application/x-executable\;*)     # Binaries
+        strip -v $STRIP_BINARIES "$file" ;;
+      application/x-pie-executable\;*) # Relocatable binaries
+        strip -v $STRIP_SHARED "$file" ;;
+    esac
+  done < <(find "$builddir" -type f -perm -u+x ! -name vmlinux -print0)
+
+  msg2 "Stripping vmlinux..."
+  strip -v $STRIP_STATIC "$builddir/vmlinux"
+
+  msg2 "Adding symlink..."
+  mkdir -p "$pkgdir/usr/src"
+  ln -sr "$builddir" "$pkgdir/usr/src/$pkgbase"
+}
+
+sha256sums=('51f3f1684a896e797182a0907299cc1f0ff5e5b51dd9a55478ae63a409855cee'
+            '2b4d0d6a7f17690472c178efeb5db017a38b2714d62a237e43e535b23dc2fe62'
+            '400b217838ea52f9b1fc8e522ccfac43a29039fee15f8f7c54d623b7bc373293')
