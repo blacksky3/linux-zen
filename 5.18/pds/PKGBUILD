@@ -54,8 +54,8 @@ for _p in "${pkgname[@]}"; do
     _package${_p#$pkgbase}
   }"
 done
-pkgver=5.18.6
-versiontag=5.18.6-zen1
+pkgver=5.18.8
+versiontag=5.18.8-zen1
 pkgrel=1
 major=5.18
 arch=(x86_64)
@@ -67,7 +67,7 @@ if [[ "$_compiler" = "2" ]]; then
 fi
 options=(!strip)
 
-archlinuxpath=https://raw.githubusercontent.com/archlinux/svntogit-packages/f273f5cd51588448e10187ed7676486aabd9d233/trunk
+archlinuxpath=https://raw.githubusercontent.com/archlinux/svntogit-packages/f6ff06892f2cda6908fba3afdb23593294933bbe/trunk
 
 source=(https://mirrors.edge.kernel.org/pub/linux/kernel/v5.x/linux-$major.tar.xz
         https://github.com/zen-kernel/zen-kernel/releases/download/v$versiontag/v$versiontag.patch.xz
@@ -284,5 +284,5 @@ _package-headers(){
 }
 
 sha256sums=('51f3f1684a896e797182a0907299cc1f0ff5e5b51dd9a55478ae63a409855cee'
-            'a3c6eb83fcc7a8bc1ceb6e2b0732bd7bb31a1d16c3f7024e4ffbf5fcb5124454'
+            '5f242a262940e5af235823e4e63d2396cc810a2e418b5f225fee928009cf2733'
             '01fc2a937a19dad37a6e1c0262de3fc45aeca23e53166342eb9148e4900e04c4')
