@@ -4,7 +4,7 @@ Zen kernel build for Archlinux. (PDS or BMQ enabled)
 
 # Version
 
-- 5.18.9-zen1
+- 5.18.10-zen1
 
 # Build
 
